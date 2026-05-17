@@ -14,7 +14,7 @@ app.use(clerkMiddleware());
 
 app.get("/", (req, res) => res.send("Server is live!")); // Home Route
 
-app.use("/api/ai", aiRoute  r);
+app.use("/api/ai", aiRouter);
 app.use("/api/user", userRouter);
 
 const PORT = process.env.PORT || 3000;
