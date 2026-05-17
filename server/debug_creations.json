@@ -1,0 +1,57 @@
+[
+  {
+    "id": 14,
+    "user_id": "user_3DcQgaKzx0DAJAxV6AVYfaDnk2L",
+    "prompt": "Generate 5 catchy blog titles for the keyword \"Nvidia Gforce\" in the category \"Technology\". Return only the titles as a bulleted list, without any introductory text.",
+    "content": "*   ",
+    "type": "blog-title",
+    "publish": false,
+    "likes": [],
+    "created_at": "2026-05-17T06:47:44.967Z",
+    "updated_at": "2026-05-17T06:47:44.967Z"
+  },
+  {
+    "id": 13,
+    "user_id": "user_3DcQgaKzx0DAJAxV6AVYfaDnk2L",
+    "prompt": "Generate 5 catchy blog titles for the keyword \"Nvidia Gforce\" in the category \"Technology\". Return only the titles as a bulleted list, without any introductory text.",
+    "content": "*   N",
+    "type": "blog-title",
+    "publish": false,
+    "likes": [],
+    "created_at": "2026-05-17T06:47:12.850Z",
+    "updated_at": "2026-05-17T06:47:12.850Z"
+  },
+  {
+    "id": 12,
+    "user_id": "user_3DcQgaKzx0DAJAxV6AVYfaDnk2L",
+    "prompt": "Generate 5 catchy blog titles for the keyword \"React.js\" in the category \"Technology\". Return only the titles as a bulleted list, without any introductory text.",
+    "content": "*   Master React",
+    "type": "blog-title",
+    "publish": false,
+    "likes": [],
+    "created_at": "2026-05-17T06:46:41.839Z",
+    "updated_at": "2026-05-17T06:46:41.839Z"
+  },
+  {
+    "id": 11,
+    "user_id": "user_3DcQgaKzx0DAJAxV6AVYfaDnk2L",
+    "prompt": "Generate 5 catchy blog titles for the keyword \"React.js\" in the category \"Technology\". Return only the titles as a bulleted list, without any introductory text.",
+    "content": "*   React.",
+    "type": "blog-title",
+    "publish": false,
+    "likes": [],
+    "created_at": "2026-05-17T06:46:36.045Z",
+    "updated_at": "2026-05-17T06:46:36.045Z"
+  },
+  {
+    "id": 10,
+    "user_id": "user_3DcQgaKzx0DAJAxV6AVYfaDnk2L",
+    "prompt": "Generate a blog title for the keyword React.js in the category Technology",
+    "content": "Here",
+    "type": "blog-title",
+    "publish": false,
+    "likes": [],
+    "created_at": "2026-05-17T06:43:23.420Z",
+    "updated_at": "2026-05-17T06:43:23.420Z"
+  }
+]
