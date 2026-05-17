@@ -4,7 +4,6 @@ import { clerkClient } from "@clerk/express";
 import axios from "axios";
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
-import { PDFParse } from "pdf-parse";
 
 const AI = new OpenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -250,12 +249,30 @@ export const resumeReview = async (req, res) => {
 
     // Convert resume file to data buffer using file system
     const dataBuffer = fs.readFileSync(resume.path);
+    
+    // Polyfills for pdfjs-dist on Vercel Node environment
+    global.DOMMatrix = global.DOMMatrix || class DOMMatrix {};
+    global.ImageData = global.ImageData || class ImageData {};
+    global.Path2D = global.Path2D || class Path2D {};
+    
     // Now parse resume to extract text using pdf-parse package
-    const parser = new PDFParse({ data: dataBuffer });
-    const pdfData = await parser.getText();
+    const { default: pdfParse } = await import("pdf-parse");
+    let pdfText = "";
+    try {
+      const pdfData = await pdfParse(dataBuffer);
+      pdfText = pdfData.text;
+    } catch (parseError) {
+      // If pdf-parse function fails, try to see if it exported PDFParse
+      if (typeof pdfParse !== 'function' && pdfParse.PDFParse) {
+        const parser = new pdfParse.PDFParse({ data: dataBuffer });
+        pdfText = await parser.getText();
+      } else {
+        throw parseError;
+      }
+    }
 
     const prompt = `Review the following resume and provide constructive feedback on its strengths,
-    weaknesses, and areas for improvement. Resume Content: \n\n${pdfData.text}`;
+    weaknesses, and areas for improvement. Resume Content: \n\n${pdfText}`;
 
     const response = await AI.chat.completions.create({
       model: "gemini-2.5-pro",
