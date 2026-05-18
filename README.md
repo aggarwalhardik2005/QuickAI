@@ -121,11 +121,3 @@ Your application should now be running locally at `http://localhost:5173`.
 
 *   **Frontend:** Optimized for deployment on **Vercel** or Netlify.
 *   **Backend:** Configured for Vercel Serverless Functions. (Note: `pdf-parse@1.1.1` is specifically used to ensure compatibility with Vercel's serverless Node.js environment).
-
----
-
-## 🤝 Contributing
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](#) if you want to contribute.
-
-## 📝 License
-This project is licensed under the MIT License - see the LICENSE file for details.
