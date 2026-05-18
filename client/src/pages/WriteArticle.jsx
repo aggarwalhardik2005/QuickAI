@@ -1,4 +1,4 @@
-import { Edit, Sparkle } from "lucide-react";
+import { Edit, Sparkle, Copy, Check } from "lucide-react";
 import React, { useState } from "react";
 import axios from "axios";
 import { useAuth } from "@clerk/react";
@@ -9,38 +9,73 @@ axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
 const WriteArticle = () => {
   const articlelength = [
-    { length: 1500, text: "Short (500-800 words)" },
-    { length: 2500, text: "Medium (800-1200 words)" },
-    { length: 4000, text: "Long (1200+ words)" },
+    { length: 500, text: "Short (500-800 words)" },
+    { length: 800, text: "Medium (800-1200 words)" },
+    { length: 1200, text: "Long (1200+ words)" },
   ];
 
   const [selectedlength, setSelectedLength] = useState(articlelength[0]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [content, setContent] = useState('');
-  const {getToken} = useAuth();
+  const [content, setContent] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
+  const { getToken } = useAuth();
+
+  const handleCopy = () => {
+    if (!content) return;
+    navigator.clipboard.writeText(content);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   const onSubmitHandler = async (e) => {
     e.preventDefault();
+
+    if (!input.trim()) {
+      return toast.error("Please enter an article topic");
+    }
+
     try {
       setLoading(true);
-      const prompt = `Write an article about "${input}". The required length is ${selectedlength.text}. Ensure the article is comprehensive, well-structured, and concludes properly without being cut off.`;
 
-      const {data}=await axios.post('/api/ai/generate-article',{prompt, length: selectedlength.length},{
-        headers:{
-          Authorization: `Bearer ${await getToken()}`
-        }
-      })
+      const cleanInput = input.trim().slice(0, 150);
 
-      if(data.success){
-        setContent(data.content)
-      }else{
-        toast.error(data.message)
+      const prompt = `
+Write a well-structured article about "${cleanInput}".
+
+Requirements:
+- ${selectedlength.text}
+- Use headings and subheadings
+- Keep the content clear and engaging
+- End with a proper conclusion
+`;
+
+      const { data } = await axios.post(
+        "/api/ai/generate-article",
+        {
+          prompt,
+          length: selectedlength.length,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${await getToken()}`,
+          },
+        },
+      );
+
+      if (data.success) {
+        setContent(data.content);
+      } else {
+        toast.error(data.message);
       }
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error.message);
     }
-    setLoading(false);
+
+    // Cooldown to avoid rapid requests
+    setTimeout(() => {
+      setLoading(false);
+    }, 5000);
   };
 
   return (
@@ -76,37 +111,63 @@ const WriteArticle = () => {
           ))}
         </div>
         <br />
-        <button disabled={loading} className="w-full flex justify-center items-center gap-2 bg-gradient-to-r from-[#226BFF] to-[#65ADFF] text-white py-2 px-4 rounded-lg text-sm mt-6 cursor-pointer">
-          {
-            loading ? <span className="w-4 h-4 my-1 rounded-full border-2 border-t-transparent animate-spin"></span>
-            :<Edit className="w-5" />
-          }
+        <button
+          disabled={loading}
+          className="w-full flex justify-center items-center gap-2 bg-gradient-to-r from-[#226BFF] to-[#65ADFF] text-white py-2 px-4 rounded-lg text-sm mt-6 cursor-pointer"
+        >
+          {loading ? (
+            <span className="w-4 h-4 my-1 rounded-full border-2 border-t-transparent animate-spin"></span>
+          ) : (
+            <Edit className="w-5" />
+          )}
           Generate Article
         </button>
       </form>
 
       {/* Right Column */}
       <div className="w-full max-w-lg p-4 bg-white rounded-lg flex flex-col border border-gray-200 min-h-96 max-h-[600px]">
-        <div className="flex items-center gap-3">
-          <Edit className="w-5 h-5 text-[#4A7AFF]"/>
-          <h1 className="text-xl font-semibold">Generated Article</h1>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Edit className="w-5 h-5 text-[#4A7AFF]" />
+            <h1 className="text-xl font-semibold">Generated Article</h1>
+          </div>
+          <div className="relative flex items-center">
+            {isCopied && (
+              <span className="absolute -top-8 right-0 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-100 whitespace-nowrap z-10 transition-opacity">
+                Copied to Clipboard
+              </span>
+            )}
+            <button
+              onClick={handleCopy}
+              disabled={!content}
+              className={`p-2 rounded-md transition-colors ${
+                !content
+                  ? "text-gray-300 cursor-not-allowed"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 cursor-pointer"
+              }`}
+              title="Copy to Clipboard"
+            >
+              {isCopied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         {!content ? (
-          <div className='flex flex-1 justify-center items-center'>
-          <div className="text-sm flex flex-col items-center gap-5 text-gray-400">
-            <Edit className="w-9 h-9"/>
-            <p>Enter a topic and click <b>"Generate Article"</b> to get started</p>
+          <div className="flex flex-1 justify-center items-center">
+            <div className="text-sm flex flex-col items-center gap-5 text-gray-400">
+              <Edit className="w-9 h-9" />
+              <p>
+                Enter a topic and click <b>"Generate Article"</b> to get started
+              </p>
+            </div>
           </div>
-        </div>
         ) : (
           <div className="mt-3 h-full overflow-y-scroll text-sm text-slate-600">
             <div className="reset-tw">
               <Markdown>{content}</Markdown>
-              </div>
+            </div>
           </div>
-        ) }
-        
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { Eraser, FileText, Sparkles } from "lucide-react";
+import { Eraser, FileText, Sparkles, Copy, Check } from "lucide-react";
 import React, { useState } from "react";
 import axios from "axios";
 import { useAuth } from "@clerk/react";
@@ -10,7 +10,15 @@ const ReviewResume = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
   const { getToken } = useAuth();
+
+  const handleCopy = () => {
+    if (!content) return;
+    navigator.clipboard.writeText(content);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   const onSubmitHandler = async (e) => {
     e.preventDefault();
@@ -76,9 +84,30 @@ const ReviewResume = () => {
       </form>
       {/* Right Column */}
       <div className="w-full max-w-lg p-4 bg-white rounded-lg flex flex-col border border-gray-200 min-h-96 max-h-[600px]">
-        <div className="flex items-center gap-3">
-          <FileText className="w-5 h-5 text-[#00DA83]" />
-          <h1 className="text-xl font-semibold">Analysis Result</h1>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-[#00DA83]" />
+            <h1 className="text-xl font-semibold">Analysis Result</h1>
+          </div>
+          <div className="relative flex items-center">
+            {isCopied && (
+              <span className="absolute -top-8 right-0 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-100 whitespace-nowrap z-10 transition-opacity">
+                Copied to Clipboard
+              </span>
+            )}
+            <button
+              onClick={handleCopy}
+              disabled={!content}
+              className={`p-2 rounded-md transition-colors ${
+                !content
+                  ? "text-gray-300 cursor-not-allowed"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 cursor-pointer"
+              }`}
+              title="Copy to Clipboard"
+            >
+              {isCopied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         {!content ? (

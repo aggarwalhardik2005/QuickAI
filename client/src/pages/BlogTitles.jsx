@@ -1,4 +1,4 @@
-import { Edit, Hash, Sparkles } from "lucide-react";
+import { Edit, Hash, Sparkles, Copy, Check } from "lucide-react";
 import React, { useState } from "react";
 import toast from "react-hot-toast";
 import Markdown from "react-markdown";
@@ -23,14 +23,42 @@ const BlogTitles = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
   const { getToken } = useAuth();
+
+  const handleCopy = () => {
+    if (!content) return;
+    navigator.clipboard.writeText(content);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   const onSubmitHandler = async (e) => {
     e.preventDefault();
+
+    if (!input.trim()) {
+      return toast.error("Please enter a keyword");
+    }
+
     try {
       setLoading(true);
-      const prompt = `Generate 5 catchy blog titles for the keyword "${input}" in the category "${selectedCategory}".`;
-      // console.log(prompt)
+
+      // Clean input
+      const cleanInput = input.trim().slice(0, 100);
+
+      const prompt = `
+Generate 5 short catchy blog titles.
+
+Keyword: ${cleanInput}
+Category: ${selectedCategory}
+
+Requirements:
+- Engaging
+- SEO-friendly
+- Unique
+- Numbered list only
+`;
+
       const { data } = await axios.post(
         "/api/ai/generate-blog-title",
         { prompt },
@@ -49,8 +77,13 @@ const BlogTitles = () => {
     } catch (error) {
       toast.error("Something went wrong");
     }
-    setLoading(false);
+
+    // Cooldown to avoid Gemini free-tier throttling
+    setTimeout(() => {
+      setLoading(false);
+    }, 10000);
   };
+
   return (
     <div className="h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-4 text-slate-700">
       {/* Left Column */}
@@ -98,9 +131,30 @@ const BlogTitles = () => {
       </form>
       {/* Right Column */}
       <div className="w-full max-w-lg p-4 bg-white rounded-lg flex flex-col border border-gray-200 min-h-96">
-        <div className="flex items-center gap-3">
-          <Hash className="w-5 h-5 text-[#8E37EB]" />
-          <h1 className="text-xl font-semibold">Generated Titles</h1>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Hash className="w-5 h-5 text-[#8E37EB]" />
+            <h1 className="text-xl font-semibold">Generated Titles</h1>
+          </div>
+          <div className="relative flex items-center">
+            {isCopied && (
+              <span className="absolute -top-8 right-0 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-100 whitespace-nowrap z-10 transition-opacity">
+                Copied to Clipboard
+              </span>
+            )}
+            <button
+              onClick={handleCopy}
+              disabled={!content}
+              className={`p-2 rounded-md transition-colors ${
+                !content
+                  ? "text-gray-300 cursor-not-allowed"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 cursor-pointer"
+              }`}
+              title="Copy to Clipboard"
+            >
+              {isCopied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
         {!content ? (
           <div className="flex flex-1 justify-center items-center">

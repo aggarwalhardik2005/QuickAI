@@ -1,16 +1,20 @@
-import OpenAI from "openai";
 import sql from "../configs/db.js";
 import { clerkClient } from "@clerk/express";
 import axios from "axios";
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
+import { PDFParse } from "pdf-parse";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const AI = new OpenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash",
 });
 
 // Free features
+
 export const generateArticle = async (req, res) => {
   try {
     const { userId } = req.auth();
@@ -18,6 +22,7 @@ export const generateArticle = async (req, res) => {
     const plan = req.plan;
     const free_usage = req.free_usage;
 
+    // Free usage check
     if (plan !== "premium" && free_usage >= 10) {
       return res.json({
         success: false,
@@ -25,20 +30,44 @@ export const generateArticle = async (req, res) => {
       });
     }
 
-    const response = await AI.chat.completions.create({
-      model: "gemini-2.5-pro",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: Number(length) || 4000,
-    });
-    const content = response.choices[0].message.content;
-    await sql`INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId}, ${prompt}, ${content}, 'article')`;
+    // Prompt validation
+    if (!prompt || prompt.trim().length === 0) {
+      return res.json({
+        success: false,
+        message: "Prompt is required",
+      });
+    }
 
+    // Clean prompt
+    const cleanedPrompt = prompt.trim().slice(0, 2000);
+
+    // Optimized prompt
+    const finalPrompt = `
+Write a high-quality article.
+
+Requirements:
+- Clear headings and subheadings
+- Engaging writing style
+- Proper conclusion
+- Article size: ${length} tokens maximum
+
+Topic:
+
+${cleanedPrompt}
+`;
+
+    // Gemini response
+    const result = await model.generateContent(finalPrompt);
+
+    const content = result.response.text();
+
+    // Save to DB
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type)
+      VALUES (${userId}, ${cleanedPrompt}, ${content}, 'article')
+    `;
+
+    // Update free usage
     if (plan !== "premium") {
       await clerkClient.users.updateUserMetadata(userId, {
         privateMetadata: {
@@ -47,18 +76,28 @@ export const generateArticle = async (req, res) => {
       });
     }
 
-    res.json({ success: true, content });
+    // Response
+    res.json({
+      success: true,
+      content,
+    });
   } catch (error) {
-    if (error.status == 429) {
+    console.log("Generate Article Error:", error);
+
+    if (error.status === 429) {
       return res.json({
         success: false,
-        message: "Too many requests. Try again later.",
+        message: "Gemini API rate limit exceeded. Please wait and try again.",
       });
     }
-    console.log(error.status, error.message);
-    res.json({ success: false, message: error.message });
+
+    res.json({
+      success: false,
+      message: error.message,
+    });
   }
 };
+
 
 export const generateBlogTitle = async (req, res) => {
   try {
@@ -67,6 +106,7 @@ export const generateBlogTitle = async (req, res) => {
     const plan = req.plan;
     const free_usage = req.free_usage;
 
+    // Free usage limit
     if (plan !== "premium" && free_usage >= 10) {
       return res.json({
         success: false,
@@ -74,20 +114,29 @@ export const generateBlogTitle = async (req, res) => {
       });
     }
 
-    const response = await AI.chat.completions.create({
-      model: "gemini-2.5-pro",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-    });
-    const content = response.choices[0].message.content;
-    await sql`INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId}, ${prompt}, ${content}, 'blog-title')`;
+    // Validate prompt
+    if (!prompt || prompt.trim().length === 0) {
+      return res.json({
+        success: false,
+        message: "Prompt is required",
+      });
+    }
 
+    // Limit prompt size
+    const cleanedPrompt = prompt.trim().slice(0, 1000);
+
+    // Generate titles
+    const result = await model.generateContent(cleanedPrompt);
+
+    const content = result.response.text();
+
+    // Save to database
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type)
+      VALUES (${userId}, ${cleanedPrompt}, ${content}, 'blog-title')
+    `;
+
+    // Update free usage
     if (plan !== "premium") {
       await clerkClient.users.updateUserMetadata(userId, {
         privateMetadata: {
@@ -96,15 +145,30 @@ export const generateBlogTitle = async (req, res) => {
       });
     }
 
-    res.json({ success: true, content });
+    res.json({
+      success: true,
+      content,
+    });
   } catch (error) {
-    console.log(error.status, error.message);
-    res.json({ success: false, message: error.message });
+    console.log("Generate Blog Title Error:", error);
+
+    // Gemini quota handling
+    if (error.status === 429) {
+      return res.json({
+        success: false,
+        message:
+          "Gemini free-tier limit reached. Please wait 1 minute and try again.",
+      });
+    }
+
+    res.json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
 // Premium features
-
 export const generateImage = async (req, res) => {
   try {
     const { userId } = req.auth();
@@ -222,12 +286,208 @@ export const removeImageObject = async (req, res) => {
   }
 };
 
+// export const resumeReview = async (req, res) => {
+//   try {
+//     const { userId } = req.auth();
+//     const resume = req.file; // resume will be put in req.file by multer middleware
+//     const plan = req.plan;
+
+//     if (plan !== "premium") {
+//       return res.json({
+//         success: false,
+//         message: "This feature is only available in Premium Subscription",
+//       });
+//     }
+
+//     if (!resume) {
+//       return res.json({ success: false, message: "Resume file is required" });
+//     }
+
+//     if (resume.size > 5 * 1024 * 1024) {
+//       // greater than 5MB
+//       return res.json({
+//         success: false,
+//         message: "Resume file exceeds allowed size (5MB).",
+//       });
+//     }
+
+//     // Convert resume file to data buffer using file system
+//     const dataBuffer = fs.readFileSync(resume.path);
+
+//     // Polyfills for pdfjs-dist on Vercel Node environment
+//     global.DOMMatrix = global.DOMMatrix || class DOMMatrix {};
+//     global.ImageData = global.ImageData || class ImageData {};
+//     global.Path2D = global.Path2D || class Path2D {};
+
+//     // Now parse resume to extract text using pdf-parse package
+//     const pdfParseModule = await import("pdf-parse");
+//     let pdfParseFunc = pdfParseModule.default || pdfParseModule;
+//     if (pdfParseFunc && typeof pdfParseFunc.default === 'function') {
+//        pdfParseFunc = pdfParseFunc.default;
+//     }
+
+//     let pdfText = "";
+//     try {
+//       if (typeof pdfParseFunc === 'function') {
+//         const pdfData = await pdfParseFunc(dataBuffer);
+//         pdfText = pdfData.text;
+//       } else if (pdfParseModule.PDFParse) {
+//         // Fallback for when the module exports the PDFParse class directly
+//         const parser = new pdfParseModule.PDFParse({ data: dataBuffer });
+//         pdfText = await parser.getText();
+//       } else {
+//         throw new Error("Could not find a valid execution method for pdf-parse.");
+//       }
+//     } catch (parseError) {
+//       throw parseError;
+//     }
+
+//     const prompt = `Review the following resume and provide constructive feedback on its strengths,
+//     weaknesses, and areas for improvement. Resume Content: \n\n${pdfText}`;
+
+//     const response = await AI.chat.completions.create({
+//       model: "gemini-2.5-pro",
+//       messages: [
+//         {
+//           role: "user",
+//           content: prompt,
+//         },
+//       ],
+//       temperature: 0.7,
+//       max_tokens: 1500,
+//     });
+//     const content = response.choices[0].message.content;
+
+//     await sql`INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId},${prompt}, ${content}, 'resume-review')`;
+
+//     res.json({ success: true, content });
+//   } catch (error) {
+//     console.log(error.status, error.message);
+//     res.json({ success: false, message: error.message });
+//   }
+// };
+
+// export const resumeReview = async (req, res) => {
+//   try {
+//     const { userId } = req.auth();
+//     const resume = req.file;
+//     const plan = req.plan;
+
+//     // Premium plan check
+//     if (plan !== "premium") {
+//       return res.json({
+//         success: false,
+//         message: "This feature is only available in Premium Subscription",
+//       });
+//     }
+
+//     // File validation
+//     if (!resume) {
+//       return res.json({
+//         success: false,
+//         message: "Resume file is required",
+//       });
+//     }
+
+//     // File size validation (5MB)
+//     if (resume.size > 5 * 1024 * 1024) {
+//       return res.json({
+//         success: false,
+//         message: "Resume file exceeds allowed size (5MB).",
+//       });
+//     }
+
+//     // Read uploaded file
+//     const dataBuffer = fs.readFileSync(resume.path);
+
+//     // Extract text from PDF
+//     let pdfText = "";
+
+//     try {
+//       const parser = new PDFParse({
+//         data: dataBuffer,
+//       });
+
+//       const parsed = await parser.getText();
+
+//       pdfText = parsed.text;
+//     } catch (parseError) {
+//       console.log("PDF Parse Error:", parseError);
+
+//       return res.json({
+//         success: false,
+//         message: "Failed to parse PDF file",
+//       });
+//     }
+
+//     // Validate extracted text
+//     if (!pdfText || pdfText.trim().length === 0) {
+//       return res.json({
+//         success: false,
+//         message: "No readable text found in the resume",
+//       });
+//     }
+//     const cleanedText = pdfText.replace(/\s+/g, " ").trim().slice(0, 6000);
+//     // AI prompt
+//     const prompt = `
+// Review the following resume and provide:
+
+// 1. Overall Resume Score out of 10
+// 2. Strengths
+// 3. Weaknesses
+// 4. Missing Skills
+// 5. ATS Optimization Tips
+// 6. Suggestions for Improvement
+// 7. Final Verdict
+
+// Resume Content:
+
+// ${cleanedText}
+// `;
+//     console.log("Resume text length:", cleanedText.length);
+//     // AI response
+//     const response = await AI.chat.completions.create({
+//       model: "gemini-2.5-flash",
+//       messages: [
+//         {
+//           role: "user",
+//           content: prompt,
+//         },
+//       ],
+//       temperature: 0.3,
+//       max_tokens: 300,
+//     });
+
+//     const content = response.choices[0].message.content;
+
+//     // Save in database
+//     await sql`
+//       INSERT INTO creations (user_id, prompt, content, type)
+//       VALUES (${userId}, ${prompt}, ${content}, 'resume-review')
+//     `;
+
+//     // Success response
+//     res.json({
+//       success: true,
+//       content,
+//     });
+//   } catch (error) {
+//     console.log("Resume Review Error:", error);
+
+//     res.json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
 export const resumeReview = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const resume = req.file; // resume will be put in req.file by multer middleware
+    const resume = req.file;
     const plan = req.plan;
 
+    // Premium check
     if (plan !== "premium") {
       return res.json({
         success: false,
@@ -235,63 +495,103 @@ export const resumeReview = async (req, res) => {
       });
     }
 
+    // File validation
     if (!resume) {
-      return res.json({ success: false, message: "Resume file is required" });
+      return res.json({
+        success: false,
+        message: "Resume file is required",
+      });
     }
 
+    // File size validation
     if (resume.size > 5 * 1024 * 1024) {
-      // greater than 5MB
       return res.json({
         success: false,
         message: "Resume file exceeds allowed size (5MB).",
       });
     }
 
-    // Convert resume file to data buffer using file system
+    // Read PDF
     const dataBuffer = fs.readFileSync(resume.path);
-    
-    // Polyfills for pdfjs-dist on Vercel Node environment
-    global.DOMMatrix = global.DOMMatrix || class DOMMatrix {};
-    global.ImageData = global.ImageData || class ImageData {};
-    global.Path2D = global.Path2D || class Path2D {};
-    
-    // Now parse resume to extract text using pdf-parse package
-    const { default: pdfParse } = await import("pdf-parse");
+
+    // Extract text
     let pdfText = "";
+
     try {
-      const pdfData = await pdfParse(dataBuffer);
-      pdfText = pdfData.text;
+      const parser = new PDFParse({
+        data: dataBuffer,
+      });
+
+      const parsed = await parser.getText();
+
+      pdfText = parsed.text;
     } catch (parseError) {
-      // If pdf-parse function fails, try to see if it exported PDFParse
-      if (typeof pdfParse !== 'function' && pdfParse.PDFParse) {
-        const parser = new pdfParse.PDFParse({ data: dataBuffer });
-        pdfText = await parser.getText();
-      } else {
-        throw parseError;
-      }
+      console.log("PDF Parse Error:", parseError);
+
+      return res.json({
+        success: false,
+        message: "Failed to parse PDF file",
+      });
     }
 
-    const prompt = `Review the following resume and provide constructive feedback on its strengths,
-    weaknesses, and areas for improvement. Resume Content: \n\n${pdfText}`;
+    // Clean extracted text
+    const cleanedText = pdfText.replace(/\s+/g, " ").trim().slice(0, 5000);
 
-    const response = await AI.chat.completions.create({
-      model: "gemini-2.5-pro",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 1500,
+    console.log("Resume text length:", cleanedText.length);
+
+    // Validate text
+    if (!cleanedText || cleanedText.length === 0) {
+      return res.json({
+        success: false,
+        message: "No readable text found in resume",
+      });
+    }
+
+    // Prompt
+    const prompt = `
+Analyze this resume and provide:
+
+1. Resume Score (out of 10)
+2. Strengths
+3. Weaknesses
+4. Missing Skills
+5. ATS Optimization Tips
+6. Final Suggestions
+
+Resume:
+
+${cleanedText}
+`;
+
+    // Gemini response
+    const result = await model.generateContent(prompt);
+
+    const content = result.response.text();
+
+    // Save to DB
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type)
+      VALUES (${userId}, ${prompt}, ${content}, 'resume-review')
+    `;
+
+    // Response
+    res.json({
+      success: true,
+      content,
     });
-    const content = response.choices[0].message.content;
-
-    await sql`INSERT INTO creations (user_id, prompt, content, type) VALUES (${userId},${prompt}, ${content}, 'resume-review')`;
-
-    res.json({ success: true, content });
   } catch (error) {
-    console.log(error.status, error.message);
-    res.json({ success: false, message: error.message });
+    console.log("Resume Review Error:", error);
+
+    if (error.status === 429) {
+      return res.json({
+        success: false,
+        message: "Gemini API rate limit exceeded. Please wait and try again.",
+      });
+    }
+
+    res.json({
+      success: false,
+      message: error.message,
+    });
   }
 };
